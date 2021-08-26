@@ -1,0 +1,275 @@
+---
+title: 'HoL'
+author: 'FT'
+date: '06/04/2021'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Set up
+## Packages
+```{r setup, include=FALSE}
+using<-function(...) {
+    libs<-unlist(list(...))
+    req<-unlist(lapply(libs,require,character.only=TRUE))
+    need<-libs[req==FALSE]
+    if(length(need)>0){ 
+        install.packages(need)
+        lapply(need,require,character.only=TRUE)
+    }
+}
+
+using('ggplot2','dplyr','data.table','ggthemes','lubridate','scales','grid','pracma','rvest','stringr','this.path','reticulate')
+
+memory.limit(size=56000)
+
+options(digits=5)
+```
+
+## Directory
+```{r}
+directory<-this.dir()
+setwd(directory)
+print(getwd())
+```
+
+# Running the API script
+```{r}
+py_run_file('Scrape_League_v2.py')
+```
+
+# Importing main dataframe from Python and fixing names and data types
+## Import
+```{r}
+df<-py$df_full
+```
+
+## Changing the NA
+```{r}
+# is.na(df)<-df == 'NULL'
+df[df=='NULL']<-NA
+```
+
+## Fixing column names
+```{r}
+colnames(df)<-c('week_num',
+                'week_start',
+                'week_end',
+                'is_playoffs',
+                'is_consolation',
+                'team_name',
+                'team_id',
+                'g',
+                'a',
+                'p',
+                'plus_minus',
+                'ppp',
+                'gwg',
+                'sog',
+                'fw',
+                'hit',
+                'gs',
+                'w',
+                'ga',
+                'gaa',
+                'sv',
+                'sa',
+                'sv_percentage',
+                'shutout',
+                'team_name_opponent',
+                'team_id_opponent',
+                'g_opponent',
+                'a_opponent',
+                'p_opponent',
+                'plus_minus_opponent',
+                'ppp_opponent',
+                'gwg_opponent',
+                'sog_opponent',
+                'fw_opponent',
+                'hit_opponent',
+                'gs_opponent',
+                'w_opponent',
+                'ga_opponent',
+                'gaa_opponent',
+                'sv_opponent',
+                'sa_opponent',
+                'sv_percentage_opponent',
+                'shutout_opponent')
+```
+
+## fixing datatypes
+```{r}
+as.numeric(df$sv_percentage)
+
+df<-df%>%
+  mutate(week_start = as.Date(week_start),
+         week_end= as.Date(week_end))%>%
+  mutate_at(vars(is_playoffs,is_consolation,team_id:shutout,team_id_opponent:shutout_opponent),as.numeric)
+```
+
+# Adding features
+## Points, Wins, Ties, Losses
+```{r}
+df<-df%>%
+  mutate(g_point = case_when(g > g_opponent ~ 2,
+                             g == g_opponent ~ 1,
+                             TRUE ~ 0),
+         a_point = case_when(a > a_opponent ~ 2,
+                             a == a_opponent ~ 1,
+                             TRUE ~ 0),
+         p_point = case_when(p > p_opponent ~ 2,
+                             p == p_opponent ~ 1,
+                             TRUE ~ 0),
+         plus_minus_point = case_when(plus_minus > plus_minus_opponent ~ 2,
+                                      plus_minus == plus_minus_opponent ~ 1,
+                                      TRUE ~ 0),
+         ppp_point = case_when(ppp > ppp_opponent ~ 2,
+                               ppp == ppp_opponent ~ 1,
+                               TRUE ~ 0),
+         gwg_point = case_when(gwg > gwg_opponent ~ 2,
+                               gwg == gwg_opponent ~ 1,
+                               TRUE ~ 0),
+         sog_point = case_when(sog > sog_opponent ~ 2,
+                               sog == sog_opponent ~ 1,
+                               TRUE ~ 0),
+         fw_point = case_when(fw > fw_opponent ~ 2,
+                              fw == fw_opponent ~ 1,
+                              TRUE ~ 0),
+         hit_point = case_when(hit > hit_opponent ~ 2,
+                               hit == hit_opponent ~ 1,
+                               TRUE ~ 0),
+         gs_point = case_when(gs > gs_opponent ~ 2,
+                              gs == gs_opponent ~ 1,
+                              TRUE ~ 0),
+         w_point = case_when(w > w_opponent ~ 2,
+                             w == w_opponent ~ 1,
+                             TRUE ~ 0),
+         gaa_point = case_when(gaa < gaa_opponent ~ 2,
+                               gaa == gaa_opponent ~ 1,
+                               TRUE ~ 0),
+         sv_percentage_point = case_when(sv/sa < sv_opponent/sa_opponent ~ 2,
+                                         sv/sa == sv_opponent/sa_opponent ~ 1,
+                                         TRUE ~ 0),
+         shutout_point = case_when(shutout > shutout_opponent ~ 2,
+                                   shutout == shutout_opponent ~ 1,
+                                   TRUE ~ 0),
+         
+         g_win = ifelse(g_point == 2,1,0),
+         a_win = ifelse(a_point == 2,1,0),
+         p_win = ifelse(p_point == 2,1,0),
+         plus_minus_win = ifelse(plus_minus_point == 2,1,0),
+         ppp_win = ifelse(ppp_point == 2,1,0),
+         gwg_win = ifelse(gwg_point == 2,1,0),
+         sog_win = ifelse(sog_point == 2,1,0),
+         fw_win = ifelse(fw_point == 2,1,0),
+         hit_win = ifelse(hit_point == 2,1,0),
+         gs_win = ifelse(gs_point == 2,1,0),
+         w_win = ifelse(w_point == 2,1,0),
+         gaa_win = ifelse(gaa_point == 2,1,0),
+         sv_percentage_win = ifelse(sv_percentage_point == 2,1,0),
+         shutout_win = ifelse(shutout_point == 2,1,0),
+         
+         g_tie = ifelse(g_point == 1,1,0),
+         a_tie = ifelse(a_point == 1,1,0),
+         p_tie = ifelse(p_point == 1,1,0),
+         plus_minus_tie = ifelse(plus_minus_point == 1,1,0),
+         ppp_tie = ifelse(ppp_point == 1,1,0),
+         gwg_tie = ifelse(gwg_point == 1,1,0),
+         sog_tie = ifelse(sog_point == 1,1,0),
+         fw_tie = ifelse(fw_point == 1,1,0),
+         hit_tie = ifelse(hit_point == 1,1,0),
+         gs_tie = ifelse(gs_point == 1,1,0),
+         w_tie = ifelse(w_point == 1,1,0),
+         gaa_tie = ifelse(gaa_point == 1,1,0),
+         sv_percentage_tie = ifelse(sv_percentage_point == 1,1,0),
+         shutout_tie = ifelse(shutout_point == 1,1,0),
+         
+         g_loss = ifelse(g_point == 0,1,0),
+         a_loss = ifelse(a_point == 0,1,0),
+         p_loss = ifelse(p_point == 0,1,0),
+         plus_minus_loss = ifelse(plus_minus_point == 0,1,0),
+         ppp_loss = ifelse(ppp_point == 0,1,0),
+         gwg_loss = ifelse(gwg_point == 0,1,0),
+         sog_loss = ifelse(sog_point == 0,1,0),
+         fw_loss = ifelse(fw_point == 0,1,0),
+         hit_loss = ifelse(hit_point == 0,1,0),
+         gs_loss = ifelse(gs_point == 0,1,0),
+         w_loss = ifelse(w_point == 0,1,0),
+         gaa_loss = ifelse(gaa_point == 0,1,0),
+         sv_percentage_loss = ifelse(sv_percentage_point == 0,1,0),
+         shutout_loss = ifelse(shutout_point == 0,1,0),
+
+         weekly_cat_wins = g_win + a_win + p_win + plus_minus_win + ppp_win + gwg_win + sog_win + fw_win + hit_win + gs_win + w_win + gaa_win + sv_percentage_win + shutout_win,
+         weekly_cat_ties = g_tie + a_tie + p_tie + plus_minus_tie + ppp_tie + gwg_tie + sog_tie + fw_tie + hit_tie + gs_tie + w_tie + gaa_tie + sv_percentage_tie + shutout_tie,
+         weekly_cat_losses = g_loss + a_loss + p_loss + plus_minus_loss + ppp_loss + gwg_loss + sog_loss + fw_loss + hit_loss + gs_loss + w_loss + gaa_loss + sv_percentage_loss + shutout_loss,
+         weekly_points = g_point + a_point + p_point + plus_minus_point + ppp_point + gwg_point + sog_point + fw_point + hit_point + gs_point + w_point + gaa_point + sv_percentage_point + shutout_point)
+```
+
+## Cumulative Record and Points
+```{r}
+df<-df%>%
+  group_by(team_name)%>%
+  mutate(cumul_cat_wins = cumsum(weekly_cat_wins),
+         cumul_cat_ties = cumsum(weekly_cat_ties),
+         cumul_cat_losses = cumsum(weekly_cat_losses),
+         cumul_points = cumsum(weekly_points),
+         cumul_points_percentage = cumul_points/(28*week_num))
+```
+
+## Adding Rank
+```{r}
+df<-df%>%
+  group_by(week_num)%>%
+  mutate(week_rank = rank(cumul_points,ties.method = 'min'))
+```
+
+
+# Visualization
+## Team points over time
+```{r}
+df%>%
+  filter(week_end < Sys.Date())%>%
+  ggplot()+
+  geom_line(aes(x=week_num,y=cumul_points,color=team_name))
+```
+
+## Team points % over time
+```{r}
+df%>%
+  filter(week_end < Sys.Date())%>%
+  ggplot()+
+  geom_line(aes(x=week_num,y=cumul_points_percentage,color=team_name))
+```
+
+
+
+
+
+
+
+
+
+
+
+# Team IDs
+```{r}
+# df.teams<-data.frame(team_name = c('Smilling Gallaghers',
+#                                     'Karasuno Hockey Club',
+#                                     'Swimming Ovies',
+#                                     'Freaks and Dekes',
+#                                     'Hangers',
+#                                     'MTL Gooner',
+#                                     'Stiffy',
+#                                     'TheGauts'),
+#                      manager = c('Evan',
+#                                   'Jon',
+#                                   'Félix',
+#                                   'Ben',
+#                                   'Branden',
+#                                   'Louis',
+#                                   'Émile',
+#                                   'Mathieu'),
+#                      team_id_num = 1:8,
+#                      stringsAsFactors = F)
+```
+
