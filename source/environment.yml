@@ -1,0 +1,15 @@
+# create the local environment by typing the following command:
+# conda env create -f environment.yml
+
+# if there is an update to the dependencies, upgrade the environment with the following commands:
+# conda activate <env name>
+# conda env update --file environment.yml --prune
+
+name: fantasy_hockey
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - pip
+  - pip:
+    - -r requirements.txt
